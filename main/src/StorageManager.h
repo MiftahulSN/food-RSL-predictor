@@ -22,6 +22,7 @@ class StorageManager {
     bool begin();
     bool saveData(const String& filename, const SensorData& sensor, const PredictionResult& prediction);
     uint32_t getFileSize(const String& filename);
+    bool readFile(const String& filename);
 };
 
 #endif

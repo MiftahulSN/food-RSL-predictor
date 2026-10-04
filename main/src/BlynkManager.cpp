@@ -41,7 +41,11 @@ bool BlynkManager::sendData(const SensorData& sensor, const PredictionResult& pr
     Blynk.virtualWrite(V2, sensor.hum);
     Blynk.virtualWrite(V3, prediction.days);
     Blynk.virtualWrite(V4, prediction.score);
-    Blynk.virtualWrite(V5, prediction.status);
+    int status_index = prediction.status - 'A';
+    if (status_index < 0 || status_index > 2) status_index = 0;
+    Blynk.virtualWrite(V5, status_index);
+    Blynk.virtualWrite(V8, sensor.batt_voltage);
+    Blynk.virtualWrite(V9, sensor.batt_percent);
     return true;
 }
 

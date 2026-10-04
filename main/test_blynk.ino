@@ -36,11 +36,13 @@ void blynk_loop() {
         dummy_sensor.temp = 25.0f + counter;
         dummy_sensor.co2  = 400 + (counter * 10);
         dummy_sensor.hum  = 60.0f + counter;
+        dummy_sensor.batt_voltage = 4.2f - (counter * 0.05f);
+        dummy_sensor.batt_percent = (counter < 20) ? (100 - (counter * 5)) : 0;
 
         PredictionResult dummy_pred;
         dummy_pred.days   = (10.0f - counter > 0) ? (10.0f - counter) : 0;
         dummy_pred.score  = 95.0f - counter;
-        dummy_pred.status = 'G';
+        dummy_pred.status = 'A' + (counter % 3);
 
         if (blynk.sendData(dummy_sensor, dummy_pred)) {
           Serial.printf("[TEST 1] Stream #%d Berhasil!\n", counter);

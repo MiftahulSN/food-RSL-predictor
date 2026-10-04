@@ -2,11 +2,11 @@
 
 PredictionResult RSLPredictor::predict(const SensorData& data) const {
   PredictionResult result;
-  
+
   // 1. Temperature factor via Arrhenius Equation
   float temp_kelvin = data.temp + 273.15f;
-  float k_reference = PRE_EXPONENTIAL * exp(-ACTIVATION_ENERGY / (GAS_CONSTANT * REFERENCE_TEMP));  
-  float k_actual    = PRE_EXPONENTIAL * exp(-ACTIVATION_ENERGY / (GAS_CONSTANT * temp_kelvin));  
+  float k_reference = PRE_EXPONENTIAL * exp(-ACTIVATION_ENERGY / (GAS_CONSTANT * REFERENCE_TEMP));
+  float k_actual    = PRE_EXPONENTIAL * exp(-ACTIVATION_ENERGY / (GAS_CONSTANT * temp_kelvin));
   float rate_ratio  = k_actual / k_reference;
 
   // 2. CO2 degradation factor
@@ -14,7 +14,7 @@ PredictionResult RSLPredictor::predict(const SensorData& data) const {
   if (data.co2 > 400) {
     co2_factor = 1.0f + ((data.co2 - 400) * CO2_DECAY_FACTOR);
   }
-  
+
   // 3. Humidity degradation factor
   float humidity_factor = 1.0f;
   float humidity_deviation = abs(data.hum - 60.0f);
@@ -29,16 +29,16 @@ PredictionResult RSLPredictor::predict(const SensorData& data) const {
 
   if (predicted_shelf_life > 12.0f) predicted_shelf_life = 12.0f;
   if (predicted_shelf_life < 0.0f)  predicted_shelf_life = 0.0f;
-  
+
   float days_elapsed = BASE_SHELF_LIFE - predicted_shelf_life;
   if (days_elapsed < 0.0f) days_elapsed = 0.0f;
-  
+
   // 5. Score calculation (0 - 100%)
   result.score = 100.0f - (days_elapsed / BASE_SHELF_LIFE * 100.0f);
   if (result.score < 0.0f)   result.score = 0.0f;
   if (result.score > 100.0f) result.score = 100.0f;
-  
-  // 6. Status determination 
+
+  // 6. Status determination
   float days_age = BASE_SHELF_LIFE - predicted_shelf_life;
   if (days_age <= 3.0f) {
     result.status = 'A';

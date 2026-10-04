@@ -47,17 +47,19 @@ class BlynkManager {
   Virtual Pin Mapping
 
     Outbound (MCU -> Blynk Cloud):
-      V0: Temperature (°C)
-      V1: CO2 (ppm)
-      V2: Soil Moisture
-      V3: Remaining Days
-      V4: Prediction Score
-      V5: Status String ("Good", "Warning", "Expired")
-      V6: File Size
+      V0: Temperature (°C)                                    [Double]
+      V1: CO2 (ppm)                                           [Integer]
+      V2: Humidity (Config 1: DHT22 %RH | Config 2: Soil %)   [Double]
+      V3: Remaining Days                                      [Integer]
+      V4: Prediction Score                                    [Double]
+      V5: Status (Good/Warning/Expired)                       [Enum: 0=Good, 1=Warning, 2=Expired]
+      V6: File Size (bytes)                                   [Integer]
+      V8: Battery Voltage (V)                                 [Double]
+      V9: Battery Percent (%)                                 [Integer]
 
     Inbound (Blynk Cloud -> MCU):
-      V10: Target Filename (Text Input Widget)
-      V11: Read Data Command (Button Widget)
-      V12: Save Data Command (Button Widget)
-      V13: File Size Command (Button Widget)
+      V10: Target Filename                                    [String, Text Input Widget]
+      V11: Read Data Command                                  [Integer 0/1, Button Widget]
+      V12: Save Data Command                                  [Integer 0/1, Button Widget]
+      V13: File Size Command                                  [Integer 0/1, Button Widget]
 */

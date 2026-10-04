@@ -14,7 +14,7 @@ A portable IoT device that predicts the **Remaining Shelf Life (RSL)** of food b
 
 | Component | Measures | Power | Connections |
 |---|---|---|---|
-| **MH-Z19C** (NDIR CO2 sensor) | CO2 gas (400–5000 ppm) | 5 V | TX > GPIO17 (UART1), RX > GPIO18 (UART1), PWM > GPIO6 |
+| **MH-Z19C** (NDIR CO2 sensor) | CO2 gas (400–5000 ppm) | 5 V | TX > GPIO18 (UART1), RX > GPIO17 (UART1), PWM > GPIO6 |
 | **DHT22** (AM2302) | Temperature & humidity | 3.3 V | Data (AnalogOut) > GPIO2 |
 
 ### Sensor Config 2
@@ -58,5 +58,5 @@ A portable IoT device that predicts the **Remaining Shelf Life (RSL)** of food b
 | GPIO11 | SPI MOSI | SD Card |
 | GPIO12 | SPI CLK | SD Card |
 | GPIO13 | SPI MISO | SD Card |
-| GPIO17 | UART1 RX | MH-Z19C TX |
-| GPIO18 | UART1 TX | MH-Z19C RX |
+| GPIO17 | UART1 TX | MH-Z19C RX |
+| GPIO18 | UART1 RX | MH-Z19C TX |

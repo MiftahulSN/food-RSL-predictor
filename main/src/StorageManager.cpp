@@ -1,4 +1,4 @@
-#include "StorageManager.h" 
+#include "StorageManager.h"
 
 StorageManager::StorageManager(uint8_t cs_pin, uint8_t sck_pin, uint8_t mosi_pin, uint8_t miso_pin) {
   _cs_pin = cs_pin;
@@ -9,7 +9,7 @@ StorageManager::StorageManager(uint8_t cs_pin, uint8_t sck_pin, uint8_t mosi_pin
 }
 
 bool StorageManager::begin() {
-  SPI.begin();
+  SPI.begin(_sck_pin, _miso_pin, _mosi_pin, _cs_pin);
   _status = SD.begin(_cs_pin);
   return _status;
 }
@@ -22,14 +22,14 @@ bool StorageManager::saveData(const String& filename, const SensorData& sensor, 
 
   if (file) {
     if (!SD.exists(path) || file.size() == 0) {
-      file.println("co2,temp,hum,score,status,days");
+      file.println("co2,temp,hum,batt_v,batt_pct,score,status,days");
     }
 
-    String data = String(sensor.co2) + "," + 
-                  String(sensor.temp) + "," + 
+    String data = String(sensor.co2) + "," +
+                  String(sensor.temp) + "," +
                   String(sensor.hum) + "," +
-                  String(prediction.score) + "," + 
-                  String(prediction.status) + "," + 
+                  String(prediction.score) + "," +
+                  String(prediction.status) + "," +
                   String(prediction.days);
 
     file.println(data);
@@ -52,4 +52,20 @@ uint32_t StorageManager::getFileSize(const String& filename) {
   uint32_t size = file.size();
   file.close();
   return size;
+}
+
+bool StorageManager::readFile(const String& filename) {
+  if (!_status) return false;
+
+  String path = "/" + filename;
+  if (!SD.exists(path)) return false;
+
+  File file = SD.open(path, FILE_READ);
+  if (!file) return false;
+
+  while (file.available()) {
+    Serial.write(file.read());
+  }
+  file.close();
+  return true;
 }
