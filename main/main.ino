@@ -10,16 +10,10 @@
 #include "src/StorageManager.h"
 #include "src/Types.h"
 
-#define DEBUG 0
-
-#define USE_SOIL_MOISTURE 1
+#define DEBUG 1
 #define SOIL_PIN A0
-
-#define USE_MHZ19 1
 #define MHZ_RX_PIN  0
 #define MHZ_TX_PIN  2
-
-#define USE_SD_CARD 1
 #define SD_CS_PIN PIN_SPI_SS
 #define SD_SCK_PIN PIN_SPI_SCK
 #define SD_MOSI_PIN PIN_SPI_MOSI
@@ -59,14 +53,31 @@ void setup() {
   sensor.begin();
   storage.begin();
   WiFi.mode(WIFI_STA);
-  blynk.begin(BLYNK_AUTH, WIFI_SSID, WIFI_PASS);
+  blynk.begin(BLYNK_AUTH_TOKEN, WIFI_SSID, WIFI_PASS);
+}
+
+/*
+  Loop
+    [NOTES]
+      Use only one loop functions, comment the rest functions!
+      Main loop as the main function, and the rest functions are for testing purposes!
+      Don't forget to change #define DEBUG 1 when using testing functions!
+*/
+
+void loop() {
+  // main_loop();
+  blynk_loop();
+  // sdcard_loop();
+  // mhz19_loop();
 }
 
 /*
   Main Loop
+    [NOTES]
+      This function is for the main operation of the system, integraring all components and functionalities.
 */
 
-void loop() {
+void main_loop() {
   blynk.run();
 
   // [OPERATION] File Size Request Command
@@ -83,6 +94,8 @@ void loop() {
 
   if (millis() - MARK_TIME >= INTERVAL_TIME) {
     MARK_TIME = millis();
+
+    // [OPERATION] Reading Sensor Data and Making Prediction
     data = sensor.readAll();
     prediction = predictor.predict(data);
 #if DEBUG
