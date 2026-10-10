@@ -28,6 +28,8 @@ bool StorageManager::saveData(const String& filename, const SensorData& sensor, 
     String data = String(sensor.co2) + "," +
                   String(sensor.temp) + "," +
                   String(sensor.hum) + "," +
+                  String(sensor.batt_voltage) + "," +
+                  String(sensor.batt_percent) + "," +
                   String(prediction.score) + "," +
                   String(prediction.status) + "," +
                   String(prediction.days);

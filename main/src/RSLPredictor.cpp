@@ -39,10 +39,9 @@ PredictionResult RSLPredictor::predict(const SensorData& data) const {
   if (result.score > 100.0f) result.score = 100.0f;
 
   // 6. Status determination
-  float days_age = BASE_SHELF_LIFE - predicted_shelf_life;
-  if (days_age <= 3.0f) {
+  if (days_elapsed <= 3.0f) {
     result.status = 'A';
-  } else if (days_age <= 6.0f) {
+  } else if (days_elapsed <= 6.0f) {
     result.status = 'B';
   } else {
     result.status = 'C';

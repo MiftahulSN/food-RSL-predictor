@@ -122,6 +122,23 @@ float SCD41Sensor::readTemperature() {
   return _last.temp;
 }
 
+void SCD41Sensor::selfCalibration(bool on) {
+  _scd.enablePeriodMeasure(SCD4X_STOP_PERIODIC_MEASURE);
+  if (_scd.getAutoCalibMode() != on) {
+    _scd.setAutoCalibMode(on);
+    _scd.persistSettings();
+  }
+  _scd.enablePeriodMeasure(SCD4X_START_PERIODIC_MEASURE);
+}
+
+int16_t SCD41Sensor::calibrateZero(uint16_t ref_ppm) {
+  // Returns FRC correction in ppm; 32767 (0xFFFF) means FRC failed.
+  _scd.enablePeriodMeasure(SCD4X_STOP_PERIODIC_MEASURE);
+  int16_t correction = _scd.forcedRecalibration(ref_ppm);
+  _scd.enablePeriodMeasure(SCD4X_START_PERIODIC_MEASURE);
+  return correction;
+}
+
 /*
   Soil Moisture Sensor Implementation
 */
@@ -207,6 +224,8 @@ SensorData SensorManager::readAll() {
     data.temp = _scd41Sensor->readTemperature();
   }
   if (_soilSensor) {
+    // [DESIGN] SENSOR_CONFIG 2: soil moisture intentionally replaces SCD41
+    // air humidity as the humidity input for RSL prediction.
     data.hum = _soilSensor->readMoisture();
   }
   if (_battMonitor) {

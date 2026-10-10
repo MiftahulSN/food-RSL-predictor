@@ -20,12 +20,18 @@
                            0 = disable MH-Z19C self calibration
     MHZ_ZERO_CALIBRATION : 1 = send zero-point calibration at boot (ONLY in stable fresh air ~400 ppm)
                            0 = disable zero-point calibration
+    SCD_SELF_CALIBRATION : 1 = enable SCD41 automatic self calibration (ASC)
+                           0 = disable SCD41 automatic self calibration
+    SCD_ZERO_CALIBRATION : 1 = SCD41 FRC at boot + 10 min settle (fresh air ~420 ppm)
+                           0 = disable SCD41 forced recalibration
 */
 
 #define DEBUG 1
 #define SENSOR_CONFIG 1
 #define MHZ_SELF_CALIBRATION 0
 #define MHZ_ZERO_CALIBRATION 0
+#define SCD_SELF_CALIBRATION 0
+#define SCD_ZERO_CALIBRATION 0
 
 #if (DEBUG != 0) && (DEBUG != 1)
   #error "DEBUG must be 1 or 0"
@@ -38,6 +44,12 @@
 #endif
 #if (MHZ_ZERO_CALIBRATION != 0) && (MHZ_ZERO_CALIBRATION != 1)
   #error "MHZ_ZERO_CALIBRATION must be 1 or 0"
+#endif
+#if (SCD_SELF_CALIBRATION != 0) && (SCD_SELF_CALIBRATION != 1)
+  #error "SCD_SELF_CALIBRATION must be 1 or 0"
+#endif
+#if (SCD_ZERO_CALIBRATION != 0) && (SCD_ZERO_CALIBRATION != 1)
+  #error "SCD_ZERO_CALIBRATION must be 1 or 0"
 #endif
 
 #define SOIL_PIN    1
@@ -65,7 +77,7 @@ DHT22Sensor dht(DHT_PIN);
 SensorManager sensor(&mhz, &dht, nullptr, nullptr, &batt);
 #else
 SCD41Sensor scd(SDA_PIN, SCL_PIN);
-SoilSensor soil(SOIL_PIN);
+SoilSensor soil(SOIL_PIN, 3402, 1291);  // two-point calibration (dry air / water)
 SensorManager sensor(nullptr, nullptr, &scd, &soil, &batt);
 #endif
 
@@ -106,6 +118,75 @@ void setup() {
 #if DEBUG
   Serial.println(F("[MHZ19] Zero-Point Calibration sent (fresh air ~400 ppm required)."));
 #endif
+#endif
+#endif
+
+#if (SENSOR_CONFIG == 2)
+  scd.selfCalibration(SCD_SELF_CALIBRATION);
+#if DEBUG
+  Serial.print(F("[SCD41] Self-Calibration: "));
+  Serial.println(SCD_SELF_CALIBRATION ? F("ON") : F("OFF"));
+#endif
+#if SCD_ZERO_CALIBRATION
+  // FRC requires >= 3 minutes of prior operation in periodic measurement mode
+  // (SCD4x datasheet section 3.8.1). Keep the device in stable fresh air (~420 ppm).
+#if DEBUG
+  Serial.println(F("[SCD41] Zero-Point Calibration: keep device in fresh air (~420 ppm)!"));
+#endif
+  for (uint8_t m = 3; m > 0; m--) {
+#if DEBUG
+    Serial.print(F("[SCD41] Calibrating in "));
+    Serial.print(m);
+    Serial.println(F(" minute(s)..."));
+#endif
+    delay(60000);
+  }
+#if DEBUG
+  int16_t frc_correction = scd.calibrateZero();
+  bool frc_ok = (frc_correction != 32767);
+  if (frc_ok) {
+    Serial.print(F("[SCD41] Forced Recalibration OK. Correction: "));
+    Serial.print(frc_correction);
+    Serial.println(F(" ppm"));
+  } else {
+    Serial.println(F("[SCD41] Forced Recalibration FAILED (0xFFFF)."));
+  }
+#else
+  scd.calibrateZero();
+  bool frc_ok = true;
+#endif
+
+  // [OPERATION] Post-FRC settle period: keeps the sensor running so the FRC
+  // history auto-saves to EEPROM (SCD4x datasheet 3.10.1) and verifies the
+  // result. Correctly calibrated readings must never go below ~400 ppm.
+  if (frc_ok) {
+#if DEBUG
+    Serial.println(F("[SCD41] Settle 10 min - do NOT power off (calibration auto-saving)..."));
+    uint32_t settle_start = millis();
+    bool suspicious = false;
+    while (millis() - settle_start < 600000UL) {
+      delay(5000);
+      if (scd.read()) {
+        uint16_t co2_now = scd.readCO2();
+        if (co2_now < 400) suspicious = true;
+        Serial.print(F("[SCD41] Settle "));
+        Serial.print((millis() - settle_start) / 1000);
+        Serial.print(F("s: CO2 = "));
+        Serial.print(co2_now);
+        Serial.println(F(" ppm"));
+      }
+    }
+    if (suspicious) {
+      Serial.println(F("[SCD41] WARNING: reading below 400 ppm detected!"));
+      Serial.println(F("[SCD41] FRC was anchored in wrong air (people too close / not fresh air)."));
+      Serial.println(F("[SCD41] Redo FRC in open air with everyone >= 2 m from the device."));
+    } else {
+      Serial.println(F("[SCD41] Settle done. Calibration saved. Flash with SCD_ZERO_CALIBRATION 0."));
+    }
+#else
+    delay(600000UL);
+#endif
+  }
 #endif
 #endif
 

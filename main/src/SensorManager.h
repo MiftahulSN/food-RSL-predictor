@@ -51,13 +51,25 @@ class DHT22Sensor : public BaseSensor {
 };
 
 /*
+  DFRobot SCD4X Calib Wrapper
+    Exposes the protected performForcedRecalibration method.
+*/
+class SCD4XCalib : public DFRobot_SCD4X {
+  public:
+    using DFRobot_SCD4X::DFRobot_SCD4X;
+    int16_t forcedRecalibration(uint16_t co2ppm) {
+      return performForcedRecalibration(co2ppm);
+    }
+};
+
+/*
   SCD41 Sensor (Sensor Config 2)
 */
 class SCD41Sensor : public BaseSensor {
   private:
     uint8_t _sda_pin;
     uint8_t _scl_pin;
-    DFRobot_SCD4X _scd;
+    SCD4XCalib _scd;
     bool _status;
     DFRobot_SCD4X::sSensorMeasurement_t _last;
 
@@ -67,6 +79,8 @@ class SCD41Sensor : public BaseSensor {
     bool read();
     uint16_t readCO2();
     float readTemperature();
+    void selfCalibration(bool on);
+    int16_t calibrateZero(uint16_t ref_ppm = 420);
 };
 
 /*
