@@ -10,10 +10,16 @@
 */
 class BlynkManager {
   private:
+    static const unsigned long WIFI_RECONNECT_INTERVAL  = 5000;  // ms
+    static const unsigned long BLYNK_RECONNECT_INTERVAL = 5000;  // ms
+
     bool READ_DATA = false;
     bool SAVE_DATA = false;
     bool FILE_SIZE = false;
-    String _filename;
+    String _filename;         // latest V10 value received from the app
+    String _active_filename;  // latched when a save session starts (V12 ON)
+    unsigned long _last_wifi_attempt = 0;
+    unsigned long _last_blynk_attempt = 0;
 
   public:
     static BlynkManager* _instance;
@@ -24,14 +30,15 @@ class BlynkManager {
     bool sendData(const SensorData& sensor, const PredictionResult& prediction);
     bool sendFileSize(uint32_t filesize);
 
-    // Setters
-    void setFilename(const String& name) { _filename = name; }
-    void setReadCMD(bool enable) { READ_DATA = enable; }
-    void setSaveCMD(bool enable) { SAVE_DATA = enable; }
+    // Setters (implemented in .cpp: session-latch, echo-back & debug logging)
+    void setFilename(const String& name);
+    void setReadCMD(bool enable);
+    void setSaveCMD(bool enable);
     void setFileSizeREQ() { FILE_SIZE = true; }
 
     // Getters
     const String& getFilename() const { return _filename; }
+    const String& getActiveFilename() const { return _active_filename; }
     bool getReadCMD() const { return READ_DATA; }
     bool getSaveCMD() const { return SAVE_DATA; }
     bool fileSizeRequested() {

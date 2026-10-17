@@ -42,6 +42,8 @@ class MHZ19Sensor : public BaseSensor {
 class DHT22Sensor : public BaseSensor {
   private:
     DHT _dht;
+    float _last_temp;   // last valid reading (DHT22 min period 2 s; faster
+    float _last_hum;    // reads return NaN -> keep previous value instead)
 
   public:
     DHT22Sensor(uint8_t pin);
@@ -80,6 +82,7 @@ class SCD41Sensor : public BaseSensor {
     uint16_t readCO2();
     float readTemperature();
     void selfCalibration(bool on);
+    void factoryReset();
     int16_t calibrateZero(uint16_t ref_ppm = 420);
 };
 

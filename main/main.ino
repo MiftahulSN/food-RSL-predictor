@@ -4,6 +4,7 @@
 #elif defined(ESP8266)
   #include <ESP8266WiFi.h>
 #endif
+#include "src/Debug.h"
 #include "src/BlynkManager.h"
 #include "src/RSLPredictor.h"
 #include "src/SensorManager.h"
@@ -12,8 +13,7 @@
 
 /*
   Build Configuration
-    DEBUG                : 1 = enable serial debug
-                           0 = disable serial debug
+    DEBUG                : see src/Debug.h
     SENSOR_CONFIG        : 1 = MH-Z19C (CO2) + DHT22 (Temp & Hum)
                            2 = SCD41 (CO2, Temp & Hum) + Soil Moisture
     MHZ_SELF_CALIBRATION : 1 = enable MH-Z19C self calibration (factory default)
@@ -22,20 +22,19 @@
                            0 = disable zero-point calibration
     SCD_SELF_CALIBRATION : 1 = enable SCD41 automatic self calibration (ASC)
                            0 = disable SCD41 automatic self calibration
+    SCD_FACTORY_RESET    : 1 = SCD41 factory reset at boot (erases EEPROM settings + FRC/ASC history)
+                           0 = disable SCD41 factory reset
     SCD_ZERO_CALIBRATION : 1 = SCD41 FRC at boot + 10 min settle (fresh air ~420 ppm)
                            0 = disable SCD41 forced recalibration
 */
 
-#define DEBUG 1
 #define SENSOR_CONFIG 1
 #define MHZ_SELF_CALIBRATION 0
 #define MHZ_ZERO_CALIBRATION 0
 #define SCD_SELF_CALIBRATION 0
+#define SCD_FACTORY_RESET 0
 #define SCD_ZERO_CALIBRATION 0
 
-#if (DEBUG != 0) && (DEBUG != 1)
-  #error "DEBUG must be 1 or 0"
-#endif
 #if (SENSOR_CONFIG != 1) && (SENSOR_CONFIG != 2)
   #error "SENSOR_CONFIG must be 1 (MH-Z19C + DHT22) or 2 (SCD41 + Soil Moisture)"
 #endif
@@ -47,6 +46,9 @@
 #endif
 #if (SCD_SELF_CALIBRATION != 0) && (SCD_SELF_CALIBRATION != 1)
   #error "SCD_SELF_CALIBRATION must be 1 or 0"
+#endif
+#if (SCD_FACTORY_RESET != 0) && (SCD_FACTORY_RESET != 1)
+  #error "SCD_FACTORY_RESET must be 1 or 0"
 #endif
 #if (SCD_ZERO_CALIBRATION != 0) && (SCD_ZERO_CALIBRATION != 1)
   #error "SCD_ZERO_CALIBRATION must be 1 or 0"
@@ -89,10 +91,25 @@ PredictionResult prediction;
 
 /*
   Global Variables
+    [TIMING] Decoupled scheduler
+      The sensor heartbeat is the only source of fresh data; Blynk pushes and
+      SD writes run only right AFTER a fresh read, gated by their own minimum
+      interval. Effective cadence = first heartbeat after each gate elapses.
 */
 
-unsigned long MARK_TIME = 0;
-const unsigned long INTERVAL_TIME = 1500;
+#if (SENSOR_CONFIG == 1)
+  // DHT22 min sampling period is 2 s (datasheet); MH-Z19C updates ~1 s.
+  const unsigned long SENSOR_INTERVAL = 2000;
+#else
+  // SCD41 periodic measurement outputs a fresh sample every 5 s (hardware).
+  const unsigned long SENSOR_INTERVAL = 5000;
+#endif
+const unsigned long BLYNK_INTERVAL   = 2000;  // 8 writes/tick -> 4/s (Blynk cloud limit 10/s)
+const unsigned long STORAGE_INTERVAL = 4000;  // exact multiple of the 2 s heartbeat -> 4 s writes
+
+unsigned long SENSOR_TIME = 0;
+unsigned long BLYNK_TIME  = 0;
+unsigned long STORE_TIME  = 0;
 
 /*
   Setup
@@ -122,6 +139,15 @@ void setup() {
 #endif
 
 #if (SENSOR_CONFIG == 2)
+#if SCD_FACTORY_RESET
+  // Must run BEFORE selfCalibration(): the reset restores the factory-default
+  // ASC=ON flag, which selfCalibration() re-applies afterwards. Do NOT power
+  // off during the reset (EEPROM erase takes ~1.2 s).
+  scd.factoryReset();
+#if DEBUG
+  Serial.println(F("[SCD41] Factory reset done (EEPROM settings + FRC/ASC history erased)."));
+#endif
+#endif
   scd.selfCalibration(SCD_SELF_CALIBRATION);
 #if DEBUG
   Serial.print(F("[SCD41] Self-Calibration: "));
@@ -193,6 +219,10 @@ void setup() {
   storage.begin();
   WiFi.mode(WIFI_STA);
   blynk.begin(BLYNK_AUTH_TOKEN, WIFI_SSID, WIFI_PASS);
+
+  // [TIMING] Anchor the heartbeat so the first sensor read fires immediately
+  // on the first loop iteration (push/save gates stay at 0 for the same reason).
+  SENSOR_TIME = millis() - SENSOR_INTERVAL;
 }
 
 /*
@@ -238,8 +268,9 @@ void main_loop() {
 #endif
   }
 
-  if (millis() - MARK_TIME >= INTERVAL_TIME) {
-    MARK_TIME = millis();
+  // [OPERATION] Sensor Heartbeat - every push/log below uses this fresh data
+  if (millis() - SENSOR_TIME >= SENSOR_INTERVAL) {
+    SENSOR_TIME += SENSOR_INTERVAL;  // drift-free cadence
 
     // [OPERATION] Reading Sensor Data and Making Prediction
     data = sensor.readAll();
@@ -253,20 +284,38 @@ void main_loop() {
     Serial.println(F("%)"));
 #endif
 
-    // [OPERATION] Continuous Send Data to Blynk Command
-    if (blynk.getReadCMD()) {
-      blynk.sendData(data, prediction);
+    // [OPERATION] Continuous Send Data to Blynk Command (rate-limited)
+    if (blynk.getReadCMD() && (millis() - BLYNK_TIME >= BLYNK_INTERVAL)) {
+      BLYNK_TIME = millis();
+      if (blynk.sendData(data, prediction)) {
 #if DEBUG
-      Serial.println(F("[BLYNK] Pushed data to Blynk Cloud"));
+        Serial.println(F("[BLYNK] Pushed data to Blynk Cloud"));
 #endif
+      }
     }
 
-    // [OPERATION] Continuous Save Data to SD Card Command
-    if (blynk.getSaveCMD()) {
-      String filename = blynk.getFilename();
-      storage.saveData(filename, data, prediction);
+    // [OPERATION] Continuous Save Data to SD Card Command (wear-limited)
+    if (blynk.getSaveCMD() && (millis() - STORE_TIME >= STORAGE_INTERVAL)) {
+      STORE_TIME = millis();
+      const String& filename = blynk.getActiveFilename();
+      if (filename.length() > 0) {
+        if (storage.saveData(filename, data, prediction)) {
 #if DEBUG
-      Serial.print(F("[STORAGE] Data saved to SD Card"));
+          Serial.print(F("[STORAGE] Saved to \""));
+          Serial.print(filename);
+          Serial.println(F(".csv\""));
+#endif
+        }
+#if DEBUG
+        else {
+          Serial.println(F("[STORAGE] Save FAILED (check SD card)"));
+        }
+#endif
+      }
+#if DEBUG
+      else {
+        Serial.println(F("[STORAGE] Save skipped: no session filename (set V10, then toggle V12)"));
+      }
 #endif
     }
   }

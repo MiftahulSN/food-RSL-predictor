@@ -73,18 +73,25 @@ void MHZ19Sensor::calibrateZero() {
   DHT22 Sensor Implementation
 */
 
-DHT22Sensor::DHT22Sensor(uint8_t pin) : _dht(pin, DHT22) {}
+DHT22Sensor::DHT22Sensor(uint8_t pin) : _dht(pin, DHT22), _last_temp(0.0f), _last_hum(0.0f) {}
 
 void DHT22Sensor::begin() {
   _dht.begin();
 }
 
+// [BUGFIX] Reading faster than the DHT22 2 s minimum period returns NaN.
+// Previously NaN was logged as 0.0 degC, corrupting the Arrhenius prediction.
+// Hold the last valid reading instead.
 float DHT22Sensor::readTemperature() {
-  return _dht.readTemperature();
+  float t = _dht.readTemperature();
+  if (!isnan(t)) _last_temp = t;
+  return _last_temp;
 }
 
 float DHT22Sensor::readHumidity() {
-  return _dht.readHumidity();
+  float h = _dht.readHumidity();
+  if (!isnan(h)) _last_hum = h;
+  return _last_hum;
 }
 
 /*
@@ -128,6 +135,15 @@ void SCD41Sensor::selfCalibration(bool on) {
     _scd.setAutoCalibMode(on);
     _scd.persistSettings();
   }
+  _scd.enablePeriodMeasure(SCD4X_START_PERIODIC_MEASURE);
+}
+
+void SCD41Sensor::factoryReset() {
+  // Erases all EEPROM settings and the FRC/ASC calibration history
+  // (SCD4x datasheet 3.10.4); both commands require the idle state.
+  _scd.enablePeriodMeasure(SCD4X_STOP_PERIODIC_MEASURE);
+  _scd.performFactoryReset();
+  _scd.moduleReinit();
   _scd.enablePeriodMeasure(SCD4X_START_PERIODIC_MEASURE);
 }
 

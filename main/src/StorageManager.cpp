@@ -15,26 +15,35 @@ bool StorageManager::begin() {
 }
 
 bool StorageManager::saveData(const String& filename, const SensorData& sensor, const PredictionResult& prediction) {
-  if (!_status) return 0;
+  if (!_status) return false;
 
-  String path = "/"+ filename;
-  File file = SD.open(path, FILE_WRITE);
+  // [BUGFIX] FILE_WRITE on ESP32 truncates the file on every open, so each
+  // save wiped the previous rows. FILE_APPEND keeps existing data.
+  String path = "/"+ filename + ".csv";
+  File file = SD.open(path, FILE_APPEND);
 
   if (file) {
-    if (!SD.exists(path) || file.size() == 0) {
-      file.println("co2,temp,hum,batt_v,batt_pct,score,status,days");
+    if (file.size() == 0) {
+      file.println("millis,co2,temp,hum,batt_v,batt_pct,score,status,days");
     }
 
-    String data = String(sensor.co2) + "," +
-                  String(sensor.temp) + "," +
-                  String(sensor.hum) + "," +
-                  String(sensor.batt_voltage) + "," +
-                  String(sensor.batt_percent) + "," +
-                  String(prediction.score) + "," +
-                  String(prediction.status) + "," +
-                  String(prediction.days);
-
-    file.println(data);
+    file.print(millis());
+    file.print(',');
+    file.print(sensor.co2);
+    file.print(',');
+    file.print(sensor.temp);
+    file.print(',');
+    file.print(sensor.hum);
+    file.print(',');
+    file.print(sensor.batt_voltage);
+    file.print(',');
+    file.print(sensor.batt_percent);
+    file.print(',');
+    file.print(prediction.score);
+    file.print(',');
+    file.print(prediction.status);
+    file.print(',');
+    file.println(prediction.days);
     file.close();
     return true;
   }
@@ -45,7 +54,7 @@ bool StorageManager::saveData(const String& filename, const SensorData& sensor, 
 uint32_t StorageManager::getFileSize(const String& filename) {
   if (!_status) return 0;
 
-  String path = "/" + filename;
+  String path = "/" + filename + ".csv";
   if (!SD.exists(path)) return 0;
 
   File file = SD.open(path, FILE_READ);
@@ -59,7 +68,7 @@ uint32_t StorageManager::getFileSize(const String& filename) {
 bool StorageManager::readFile(const String& filename) {
   if (!_status) return false;
 
-  String path = "/" + filename;
+  String path = "/" + filename + ".csv";
   if (!SD.exists(path)) return false;
 
   File file = SD.open(path, FILE_READ);

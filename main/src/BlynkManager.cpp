@@ -1,4 +1,5 @@
 #include "BlynkManager.h"
+#include "Debug.h"
 
 #if defined(ESP32)
   #include <WiFi.h>
@@ -13,6 +14,7 @@ BlynkManager* BlynkManager::_instance = nullptr;
 BlynkManager::BlynkManager() {
     _instance = this; 
     _filename.reserve(32);
+    _active_filename.reserve(32);
 }
 
 void BlynkManager::begin(const char* auth, const char* ssid, const char* pass) {
@@ -22,10 +24,32 @@ void BlynkManager::begin(const char* auth, const char* ssid, const char* pass) {
 }
 
 void BlynkManager::run() {
-    if (WiFi.status() == WL_CONNECTED) {
-        if (!Blynk.connected()) Blynk.connect(1000); 
-        else Blynk.run();
+    unsigned long now = millis();
+
+    // [BUGFIX] No WiFi reconnect before: if WiFi dropped, Blynk stayed down
+    // forever. Retry periodically instead of blocking every loop.
+    if (WiFi.status() != WL_CONNECTED) {
+        if (now - _last_wifi_attempt >= WIFI_RECONNECT_INTERVAL) {
+            _last_wifi_attempt = now;
+            WiFi.reconnect();
+        }
+        return;
     }
+
+    if (!Blynk.connected()) {
+        // [BUGFIX] Blynk.connect(1000) used to block every loop iteration
+        // while disconnected (1s stall of sensor + SD + Blynk processing).
+        // Attempt only every BLYNK_RECONNECT_INTERVAL.
+        if (now - _last_blynk_attempt >= BLYNK_RECONNECT_INTERVAL) {
+            _last_blynk_attempt = now;
+            if (Blynk.connect(1000)) {
+                Blynk.run();
+            }
+        }
+        return;
+    }
+
+    Blynk.run();
 }
 
 bool BlynkManager::isConnected() const {
@@ -55,6 +79,60 @@ bool BlynkManager::sendFileSize(uint32_t filesize) {
 
     Blynk.virtualWrite(V6, filesize);
     return true;
+}
+
+// inbound setter: filename text input
+// [BUGFIX] Echo the value back to V10 so (a) the app shows what the device
+// actually holds and (b) the device-side write refreshes the server's stored
+// value, so a reconnect re-sync can never resurrect a stale filename.
+void BlynkManager::setFilename(const String& name) {
+    _filename = name;
+#if DEBUG
+    Serial.print(F("[BLYNK] V10 filename = \""));
+    Serial.print(name);
+    Serial.println(F("\""));
+#endif
+    if (isConnected()) {
+        Blynk.virtualWrite(V10, name);
+    }
+}
+
+// inbound setter: continuous read command
+void BlynkManager::setReadCMD(bool enable) {
+    READ_DATA = enable;
+#if DEBUG
+    Serial.print(F("[BLYNK] V11 read = "));
+    Serial.println(enable ? F("ON") : F("OFF"));
+#endif
+}
+
+// inbound setter: continuous save command
+// [BUGFIX] Latch the filename at session start: one button-ON = one file.
+// Renaming mid-session no longer switches the output file silently.
+void BlynkManager::setSaveCMD(bool enable) {
+    if (enable && !SAVE_DATA) {
+        if (_filename.length() > 0) {
+            _active_filename = _filename;
+#if DEBUG
+            Serial.print(F("[BLYNK] Save session start -> \""));
+            Serial.print(_active_filename);
+            Serial.println(F(".csv\""));
+#endif
+            if (isConnected()) {
+                Blynk.virtualWrite(V10, _active_filename);
+            }
+        }
+#if DEBUG
+        else {
+            Serial.println(F("[BLYNK] Save session NOT started: filename empty (set V10 first)"));
+        }
+#endif
+    }
+    SAVE_DATA = enable;
+#if DEBUG
+    Serial.print(F("[BLYNK] V12 save = "));
+    Serial.println(enable ? F("ON") : F("OFF"));
+#endif
 }
 
 // inbound: Blynk event handlers
